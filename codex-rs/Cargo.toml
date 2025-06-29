@@ -8,7 +8,9 @@ members = [
     "core",
     "exec",
     "execpolicy",
+    "file-search",
     "linux-sandbox",
+    "login",
     "mcp-client",
     "mcp-server",
     "mcp-types",
@@ -35,3 +37,6 @@ lto = "fat"
 # Because we bundle some of these executables with the TypeScript CLI, we
 # remove everything to make the binary as small as possible.
 strip = "symbols"
+
+# See https://github.com/openai/codex/issues/1411 for details.
+codegen-units = 1

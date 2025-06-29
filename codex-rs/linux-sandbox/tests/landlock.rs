@@ -15,6 +15,23 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tokio::sync::Notify;
 
+// At least on GitHub CI, the arm64 tests appear to need longer timeouts.
+
+#[cfg(not(target_arch = "aarch64"))]
+const SHORT_TIMEOUT_MS: u64 = 200;
+#[cfg(target_arch = "aarch64")]
+const SHORT_TIMEOUT_MS: u64 = 5_000;
+
+#[cfg(not(target_arch = "aarch64"))]
+const LONG_TIMEOUT_MS: u64 = 1_000;
+#[cfg(target_arch = "aarch64")]
+const LONG_TIMEOUT_MS: u64 = 5_000;
+
+#[cfg(not(target_arch = "aarch64"))]
+const NETWORK_TIMEOUT_MS: u64 = 2_000;
+#[cfg(target_arch = "aarch64")]
+const NETWORK_TIMEOUT_MS: u64 = 10_000;
+
 fn create_env_from_core_vars() -> HashMap<String, String> {
     let policy = ShellEnvironmentPolicy::default();
     create_env(&policy)
@@ -29,7 +46,10 @@ async fn run_cmd(cmd: &[&str], writable_roots: &[PathBuf], timeout_ms: u64) {
         env: create_env_from_core_vars(),
     };
 
-    let sandbox_policy = SandboxPolicy::new_read_only_policy_with_writable_roots(writable_roots);
+    let sandbox_policy = SandboxPolicy::WorkspaceWrite {
+        writable_roots: writable_roots.to_vec(),
+        network_access: false,
+    };
     let sandbox_program = env!("CARGO_BIN_EXE_codex-linux-sandbox");
     let codex_linux_sandbox_exe = Some(PathBuf::from(sandbox_program));
     let ctrl_c = Arc::new(Notify::new());
@@ -52,7 +72,7 @@ async fn run_cmd(cmd: &[&str], writable_roots: &[PathBuf], timeout_ms: u64) {
 
 #[tokio::test]
 async fn test_root_read() {
-    run_cmd(&["ls", "-l", "/bin"], &[], 200).await;
+    run_cmd(&["ls", "-l", "/bin"], &[], SHORT_TIMEOUT_MS).await;
 }
 
 #[tokio::test]
@@ -63,7 +83,7 @@ async fn test_root_write() {
     run_cmd(
         &["bash", "-lc", &format!("echo blah > {}", tmpfile_path)],
         &[],
-        200,
+        SHORT_TIMEOUT_MS,
     )
     .await;
 }
@@ -75,7 +95,7 @@ async fn test_dev_null_write() {
         &[],
         // We have seen timeouts when running this test in CI on GitHub,
         // so we are using a generous timeout until we can diagnose further.
-        1_000,
+        LONG_TIMEOUT_MS,
     )
     .await;
 }
@@ -93,7 +113,7 @@ async fn test_writable_root() {
         &[tmpdir.path().to_path_buf()],
         // We have seen timeouts when running this test in CI on GitHub,
         // so we are using a generous timeout until we can diagnose further.
-        1_000,
+        LONG_TIMEOUT_MS,
     )
     .await;
 }
@@ -115,7 +135,7 @@ async fn assert_network_blocked(cmd: &[&str]) {
         cwd,
         // Give the tool a generous 2-second timeout so even slow DNS timeouts
         // do not stall the suite.
-        timeout_ms: Some(2_000),
+        timeout_ms: Some(NETWORK_TIMEOUT_MS),
         env: create_env_from_core_vars(),
     };
 
